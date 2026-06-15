@@ -182,10 +182,15 @@ void TaskTrafficLight(void *pvParameters) {
              * MODE NORMAL — State Machine
              * ─────────────────────────────────────────────────*/
 
-            /* Jika baru pulih dari emergency, pastikan semua lampu kembali merah dulu */
+            /* Jika baru pulih dari emergency, pastikan semua lampu kembali merah dulu,
+             * lalu mulai dari fase kuning persiapan (YEL->G) agar transisi kuning tetap terlihat */
             if (wasEmergency) {
                 setAllRed();
                 wasEmergency = false;
+                currentPhase = LIGHT_YELLOW_TO_GREEN;
+                timeInPhase_ms = 0;
+                setLaneLED((int)currentLane, LIGHT_YELLOW_TO_GREEN);
+                Serial.printf("[LIGHT] %s: Emergency recovery → YEL->G (prep)\n", LANE_NAMES[(int)currentLane]);
             }
 
             /* Ambil greenDuration terbaru dari Controller (timeout pendek) */
