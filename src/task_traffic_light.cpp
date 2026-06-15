@@ -138,6 +138,8 @@ void TaskTrafficLight(void *pvParameters) {
     Serial.println("[LIGHT] TaskTrafficLight started (Core 1, P=3, T=100ms).");
     Serial.printf("[LIGHT] Initial phase: %s GREEN\n", LANE_NAMES[(int)currentLane]);
 
+    bool wasEmergency = false; /* Flag untuk mendeteksi pemulihan dari emergency */
+
     for (;;) {
         {
 #if defined(MABUTRACE_ENABLED)
@@ -173,11 +175,18 @@ void TaskTrafficLight(void *pvParameters) {
 
             /* Reset timer saat emergency agar setelah restore, fase dimulai fresh */
             timeInPhase_ms = 0;
+            wasEmergency = true;
 
         } else {
             /* ──────────────────────────────────────────────────
              * MODE NORMAL — State Machine
              * ─────────────────────────────────────────────────*/
+
+            /* Jika baru pulih dari emergency, pastikan semua lampu kembali merah dulu */
+            if (wasEmergency) {
+                setAllRed();
+                wasEmergency = false;
+            }
 
             /* Ambil greenDuration terbaru dari Controller (timeout pendek) */
             if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
