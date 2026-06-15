@@ -183,7 +183,7 @@
 #define EMERGENCY_HOLD_MS  5000U   ///< 5 detik jalur darurat diberi lampu hijau
 
 /* ── KONTROL FITUR TOMBOL EMERGENCY ──────────────────────── */
-#define ENABLE_EMERGENCY_BUTTONS 1 ///< Set ke 1 untuk mengaktifkan tombol emergency (GPIO 34/35/36/39)
+#define ENABLE_EMERGENCY_BUTTONS 0 ///< Set ke 0 jika tidak ada tombol fisik/resistor pull-up (menghindari pin melayang)
 
 /* ─────────────────────────────────────────────────────────────
  * 8. ENUMERASI
