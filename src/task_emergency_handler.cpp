@@ -154,13 +154,16 @@ void TaskEmergencyHandler(void *pvParameters) {
             /* ─────────────────────────────────────────────────────
              * STEP 2: Transisi Emergency — seperti lalu lintas nyata
              *
-             * Durasi kuning dipercepat (500ms) agar cepat tapi
-             * tetap terlihat transisinya, seperti saat ambulance lewat.
+             * Durasi kuning 1 detik agar terlihat jelas transisinya.
              * ──────────────────────────────────────────────────── */
-            const uint32_t EMG_YELLOW_MS = 500; // Kuning cepat saat emergency
+            const uint32_t EMG_YELLOW_MS = 1000; // Kuning 1 detik saat emergency
+
+            Serial.printf("[EMG] prevActiveLane=%d prevPhase=%d emergLane=%d\n",
+                          (int)prevActiveLane, (int)prevPhase, (int)emergLane);
 
             if (prevActiveLane == emergLane && prevPhase == LIGHT_GREEN) {
                 /* Jalur darurat sudah hijau — tidak perlu transisi apapun */
+                Serial.println("[EMG] STEP2: Emergency lane already GREEN, no transition needed.");
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     gTrafficState.activeLane = emergLane;
                     gTrafficState.lanePhase  = LIGHT_GREEN;
@@ -173,8 +176,10 @@ void TaskEmergencyHandler(void *pvParameters) {
                 setAllLEDs(emergLEDState);
 
             } else {
-                /* ── Transisi 1: Jalur aktif HIJAU → KUNING → MERAH ── */
+                /* ── Transisi 1: Jalur aktif → KUNING → MERAH ── */
                 if (prevPhase == LIGHT_GREEN || prevPhase == LIGHT_YELLOW_TO_GREEN) {
+                    Serial.printf("[EMG] STEP2-T1: Lane %d GREEN -> YELLOW (%ums)\n",
+                                  (int)prevActiveLane, EMG_YELLOW_MS);
                     if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                         gTrafficState.activeLane = prevActiveLane;
                         gTrafficState.lanePhase  = LIGHT_YELLOW;
@@ -186,9 +191,11 @@ void TaskEmergencyHandler(void *pvParameters) {
                     }
                     setAllLEDs(yellowState);
                     vTaskDelay(pdMS_TO_TICKS(EMG_YELLOW_MS));
+                    Serial.printf("[EMG] STEP2-T1: Lane %d YELLOW -> RED\n", (int)prevActiveLane);
                 }
 
                 // Semua merah sebentar (pengosongan simpang)
+                Serial.println("[EMG] STEP2: All RED (200ms clearance)");
                 {
                     LightColor allRedState[LANE_COUNT];
                     for (int i = 0; i < LANE_COUNT; i++) {
@@ -199,6 +206,8 @@ void TaskEmergencyHandler(void *pvParameters) {
                 }
 
                 /* ── Transisi 2: Jalur emergency MERAH → KUNING → HIJAU ── */
+                Serial.printf("[EMG] STEP2-T2: Lane %d RED -> YELLOW (%ums)\n",
+                              (int)emergLane, EMG_YELLOW_MS);
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     gTrafficState.activeLane = emergLane;
                     gTrafficState.lanePhase  = LIGHT_YELLOW_TO_GREEN;
@@ -212,6 +221,7 @@ void TaskEmergencyHandler(void *pvParameters) {
                 vTaskDelay(pdMS_TO_TICKS(EMG_YELLOW_MS));
 
                 // Hijaukan jalur emergency
+                Serial.printf("[EMG] STEP2-T2: Lane %d YELLOW -> GREEN\n", (int)emergLane);
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     gTrafficState.activeLane = emergLane;
                     gTrafficState.lanePhase  = LIGHT_GREEN;
@@ -222,6 +232,7 @@ void TaskEmergencyHandler(void *pvParameters) {
                     greenState[i] = (i == (int)emergLane) ? LIGHT_GREEN : LIGHT_RED;
                 }
                 setAllLEDs(greenState);
+                Serial.printf("[EMG] STEP2: Emergency lane %d is now GREEN.\n", (int)emergLane);
             }
 
             /* ── [Tracealyzer] t2: LED menyala/transisi dimulai — hitung delta untuk NFR-02 ── */
