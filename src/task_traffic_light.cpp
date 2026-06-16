@@ -76,6 +76,9 @@ static const char* LANE_NAMES[LANE_COUNT] = { "NORTH", "EAST", "SOUTH", "WEST" }
  * @param color    Warna yang diinginkan
  */
 static void setLaneLED(int laneIdx, LightColor color) {
+    if (gTrafficState.emergencyActive) {
+        return;
+    }
     digitalWrite(PIN_LED_R[laneIdx], (color == LIGHT_RED)    ? HIGH : LOW);
     digitalWrite(PIN_LED_Y[laneIdx], (color == LIGHT_YELLOW || color == LIGHT_YELLOW_TO_GREEN) ? HIGH : LOW);
     digitalWrite(PIN_LED_G[laneIdx], (color == LIGHT_GREEN)  ? HIGH : LOW);
@@ -150,10 +153,10 @@ void TaskTrafficLight(void *pvParameters) {
         /* ─────────────────────────────────────────────────────
          * CEK EMERGENCY — baca dari TrafficState (timeout singkat)
          * ──────────────────────────────────────────────────── */
-        bool emergencyActive = false;
-        Lane emergencyLane   = LANE_NORTH;
+        static bool emergencyActive = false;
+        static Lane emergencyLane   = LANE_NORTH;
 
-        if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+        if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
             emergencyActive = gTrafficState.emergencyActive;
             emergencyLane   = gTrafficState.emergencyLane;
             xSemaphoreGive(stateMutex);
