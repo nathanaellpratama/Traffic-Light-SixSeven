@@ -127,9 +127,9 @@ void TaskMonitoring(void *pvParameters) {
     Serial.println("[MON] TaskMonitoring started (Core 0, P=2, T=500ms). Press 't' or 'T' to dump MabuTrace JSON.");
 
     for (;;) {
-        /* Cek input serial atau trigger flag global untuk dump trace MabuTrace */
+        /* Cek input serial untuk trigger dump trace MabuTrace */
 #if defined(MABUTRACE_ENABLED)
-        bool shouldDump = gTriggerTraceDump;
+        bool shouldDump = false;
         if (Serial.available() > 0) {
             char c = Serial.read();
             if (c == 't' || c == 'T') {
@@ -139,7 +139,6 @@ void TaskMonitoring(void *pvParameters) {
         }
 
         if (shouldDump) {
-            gTriggerTraceDump = false; // Reset flag
 
             // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
             if (hTaskTrafficLight != NULL) {

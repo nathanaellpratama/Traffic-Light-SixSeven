@@ -351,10 +351,6 @@ void TaskEmergencyHandler(void *pvParameters) {
 
             TRACE_EMG("EMG_DONE");
             Serial.printf("[EMG] Emergency on lane %d cleared. Restoring normal operation.\n", emergLane);
-
-            // Picu dump trace MabuTrace di TaskMonitoring (karena prioritas TaskEmergencyHandler tinggi
-            // dan stack size-nya terbatas, pemrosesan dump dialihkan ke monitoring task).
-            gTriggerTraceDump = true;
         }
 
         /* Kembali ke blocking wait untuk emergency berikutnya */
