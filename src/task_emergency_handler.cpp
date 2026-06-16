@@ -79,7 +79,7 @@ static const uint8_t PIN_LED_GRN[LANE_COUNT]   = { PIN_LED_N_GRN,  PIN_LED_E_GRN
 static void setAllLEDs(const LightColor lightColor[LANE_COUNT]) {
     for (int i = 0; i < LANE_COUNT; i++) {
         digitalWrite(PIN_LED_RED[i], (lightColor[i] == LIGHT_RED)    ? HIGH : LOW);
-        digitalWrite(PIN_LED_YEL[i], (lightColor[i] == LIGHT_YELLOW) ? HIGH : LOW);
+        digitalWrite(PIN_LED_YEL[i], (lightColor[i] == LIGHT_YELLOW || lightColor[i] == LIGHT_YELLOW_TO_GREEN) ? HIGH : LOW);
         digitalWrite(PIN_LED_GRN[i], (lightColor[i] == LIGHT_GREEN)  ? HIGH : LOW);
     }
 }
@@ -107,109 +107,227 @@ void TaskEmergencyHandler(void *pvParameters) {
 #endif
 
             /* ── [Tracealyzer] t1: semaphore diterima ── */
-        TRACE_EMG("EMG_UNBLOCKED");
-        TickType_t t1 = xTaskGetTickCount();
+            TRACE_EMG("EMG_UNBLOCKED");
+            TickType_t t1 = xTaskGetTickCount();
 
-        /* ─────────────────────────────────────────────────────
-         * AMBIL jalur emergency (tulis ISR, baca task, dilindungi mux)
-         * ──────────────────────────────────────────────────── */
-        Lane emergLane;
-        portENTER_CRITICAL(&gEmergencyMux);
-        emergLane = gEmergencyLane;
-        portEXIT_CRITICAL(&gEmergencyMux);
+            /* ─────────────────────────────────────────────────────
+             * AMBIL jalur emergency (tulis ISR, baca task, dilindungi mux)
+             * ──────────────────────────────────────────────────── */
+            Lane emergLane;
+            portENTER_CRITICAL(&gEmergencyMux);
+            emergLane = gEmergencyLane;
+            portEXIT_CRITICAL(&gEmergencyMux);
 
-        Serial.printf("[EMG] Emergency on lane %d! Preempting normal traffic.\n", emergLane);
+            Serial.printf("[EMG] Emergency on lane %d! Preempting normal traffic.\n", emergLane);
 
-        /* ─────────────────────────────────────────────────────
-         * STEP 1: Ambil stateMutex, simpan state saat ini (FR-07)
-         * Timeout 50 ms: jika tidak bisa ambil mutex, log error tapi lanjutkan.
-         * ──────────────────────────────────────────────────── */
-        TrafficState savedState;
-        bool mutexOK = (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE);
+            /* ─────────────────────────────────────────────────────
+             * STEP 1: Ambil stateMutex, simpan state saat ini (FR-07)
+             * Timeout 50 ms: jika tidak bisa ambil mutex, log error tapi lanjutkan.
+             * ──────────────────────────────────────────────────── */
+            TrafficState savedState;
+            bool mutexOK = (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE);
 
-        if (mutexOK) {
-            /* ── Save state sebelum preemption (untuk restore FR-07) ── */
-            savedState.activeLane           = gTrafficState.activeLane;
-            savedState.lanePhase            = gTrafficState.lanePhase;
-            savedState.greenRemaining_ms    = gTrafficState.greenRemaining_ms;
-            savedState.greenDuration_ms     = gTrafficState.greenDuration_ms;
+            if (mutexOK) {
+                /* ── Save state sebelum preemption (untuk restore FR-07) ── */
+                savedState.activeLane           = gTrafficState.activeLane;
+                savedState.lanePhase            = gTrafficState.lanePhase;
+                savedState.greenRemaining_ms    = gTrafficState.greenRemaining_ms;
+                savedState.greenDuration_ms     = gTrafficState.greenDuration_ms;
 
-            /* ── Set emergency state ── */
-            gTrafficState.emergencyActive   = true;
-            gTrafficState.emergencyLane     = emergLane;
-            gTrafficState.activeLane        = emergLane;
-            gTrafficState.lanePhase         = LIGHT_GREEN;
+                /* ── Set emergency state awal ── */
+                gTrafficState.emergencyActive   = true;
+                gTrafficState.emergencyLane     = emergLane;
 
-            xSemaphoreGive(stateMutex);
-        } else {
-            Serial.println("[EMG] ERROR: stateMutex timeout after 50ms! Emergency state may be inconsistent.");
-            /* Fallback: tetap lanjutkan dengan best-effort */
-            savedState.activeLane        = LANE_NORTH;
-            savedState.lanePhase         = LIGHT_RED;
-            savedState.greenRemaining_ms = BASE_GREEN_MS;
-            savedState.greenDuration_ms  = BASE_GREEN_MS;
-        }
-
-        /* ─────────────────────────────────────────────────────
-         * STEP 2: Aktuasi LED SEGERA (untuk memenuhi NFR-02 ≤ 100 ms)
-         * Jangan tunggu TaskTrafficLight — langsung digitalWrite.
-         * ──────────────────────────────────────────────────── */
-        LightColor emergLEDState[LANE_COUNT];
-        for (int i = 0; i < LANE_COUNT; i++) {
-            emergLEDState[i] = (i == (int)emergLane) ? LIGHT_GREEN : LIGHT_RED;
-        }
-        setAllLEDs(emergLEDState);
-
-        /* ── [Tracealyzer] t2: LED menyala — hitung delta untuk NFR-02 ── */
-        TRACE_EMG("EMG_LED_ON");
-        TickType_t t2 = xTaskGetTickCount();
-        uint32_t latencyMs = (t2 - t1) * portTICK_PERIOD_MS;
-        Serial.printf("[EMG] LED latency: %u ms (NFR-02 limit: 100 ms) %s\n",
-                      latencyMs, latencyMs <= 100 ? "OK" : "VIOLATION!");
-
-        /* ─────────────────────────────────────────────────────
-         * STEP 3: Update MonitoringData — set flag emergency
-         * ──────────────────────────────────────────────────── */
-        if (xSemaphoreTake(monitorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            gMonitoringData.emergencyActive = true;
-            gMonitoringData.emergencyLane   = emergLane;
-            for (int i = 0; i < LANE_COUNT; i++) {
-                gMonitoringData.lightStatus[i] = emergLEDState[i];
+                xSemaphoreGive(stateMutex);
+            } else {
+                Serial.println("[EMG] ERROR: stateMutex timeout after 50ms! Emergency state may be inconsistent.");
+                /* Fallback: tetap lanjutkan dengan best-effort */
+                savedState.activeLane        = LANE_NORTH;
+                savedState.lanePhase         = LIGHT_RED;
+                savedState.greenRemaining_ms = BASE_GREEN_MS;
+                savedState.greenDuration_ms  = BASE_GREEN_MS;
             }
-            xSemaphoreGive(monitorMutex);
-        }
 
-        /* ─────────────────────────────────────────────────────
-         * STEP 4: Tahan selama EMERGENCY_HOLD_MS
-         * Kendaraan darurat "melewati persimpangan" selama periode ini.
-         * vTaskDelay aman di sini: task ini P=5, tidak ada yang preempt.
-         * ──────────────────────────────────────────────────── */
-        TRACE_EMG("EMG_HOLDING");
-        vTaskDelay(pdMS_TO_TICKS(EMERGENCY_HOLD_MS));
+            Lane prevActiveLane = savedState.activeLane;
+            LightColor prevPhase = savedState.lanePhase;
 
-        /* ─────────────────────────────────────────────────────
-         * STEP 5: Restore saved state (FR-07)
-         * ──────────────────────────────────────────────────── */
-        TRACE_EMG("EMG_RESTORE");
+            /* ─────────────────────────────────────────────────────
+             * STEP 2: Transisi Emergency Mulai (Start Transitions)
+             * ──────────────────────────────────────────────────── */
+            if (prevActiveLane == emergLane && prevPhase == LIGHT_GREEN) {
+                // Jika jalur darurat sudah aktif dan sudah hijau, tidak perlu transisi.
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = emergLane;
+                    gTrafficState.lanePhase  = LIGHT_GREEN;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor emergLEDState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    emergLEDState[i] = (i == (int)emergLane) ? LIGHT_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(emergLEDState);
+            } else {
+                // 1. Jika jalur sebelumnya hijau dan bukan jalur emergency, kuningkan dulu jalur sebelumnya
+                if (prevActiveLane != emergLane && prevPhase == LIGHT_GREEN) {
+                    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                        gTrafficState.activeLane = prevActiveLane;
+                        gTrafficState.lanePhase  = LIGHT_YELLOW;
+                        xSemaphoreGive(stateMutex);
+                    }
+                    
+                    LightColor yellowState[LANE_COUNT];
+                    for (int i = 0; i < LANE_COUNT; i++) {
+                        yellowState[i] = (i == (int)prevActiveLane) ? LIGHT_YELLOW : LIGHT_RED;
+                    }
+                    setAllLEDs(yellowState);
+                    
+                    vTaskDelay(pdMS_TO_TICKS(YELLOW_MS));
+                }
 
-        if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
-            gTrafficState.emergencyActive    = false;
-            gTrafficState.activeLane         = savedState.activeLane;
-            gTrafficState.lanePhase          = savedState.lanePhase;
-            gTrafficState.greenRemaining_ms  = savedState.greenRemaining_ms;
-            gTrafficState.greenDuration_ms   = savedState.greenDuration_ms;
-            xSemaphoreGive(stateMutex);
-        } else {
-            Serial.println("[EMG] ERROR: stateMutex timeout during restore! State may be inconsistent.");
-        }
+                // 2. Set semua merah (All RED) untuk pengosongan simpang
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = prevActiveLane;
+                    gTrafficState.lanePhase  = LIGHT_RED;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor allRedState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    allRedState[i] = LIGHT_RED;
+                }
+                setAllLEDs(allRedState);
+                vTaskDelay(pdMS_TO_TICKS(500)); // Buffer all-red selama 500ms
 
-        /* ─────────────────────────────────────────────────────
-         * STEP 6: Update MonitoringData — clear flag emergency
-         * ──────────────────────────────────────────────────── */
-        if (xSemaphoreTake(monitorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-            gMonitoringData.emergencyActive = false;
-            xSemaphoreGive(monitorMutex);
-        }
+                // 3. Kuningkan persiapan (YEL->G) jalur emergency
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = emergLane;
+                    gTrafficState.lanePhase  = LIGHT_YELLOW_TO_GREEN;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor prepState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    prepState[i] = (i == (int)emergLane) ? LIGHT_YELLOW_TO_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(prepState);
+                vTaskDelay(pdMS_TO_TICKS(YELLOW_TO_GREEN_MS));
+
+                // 4. Hijaukan jalur emergency
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = emergLane;
+                    gTrafficState.lanePhase  = LIGHT_GREEN;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor greenState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    greenState[i] = (i == (int)emergLane) ? LIGHT_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(greenState);
+            }
+
+            /* ── [Tracealyzer] t2: LED menyala/transisi dimulai — hitung delta untuk NFR-02 ── */
+            TRACE_EMG("EMG_LED_ON");
+            TickType_t t2 = xTaskGetTickCount();
+            uint32_t latencyMs = (t2 - t1) * portTICK_PERIOD_MS;
+            Serial.printf("[EMG] LED transition latency: %u ms (NFR-02 limit: 100 ms) %s\n",
+                          latencyMs, latencyMs <= 100 ? "OK" : "VIOLATION!");
+
+            /* ─────────────────────────────────────────────────────
+             * STEP 3: Update MonitoringData — set flag emergency
+             * ──────────────────────────────────────────────────── */
+            if (xSemaphoreTake(monitorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                gMonitoringData.emergencyActive = true;
+                gMonitoringData.emergencyLane   = emergLane;
+                xSemaphoreGive(monitorMutex);
+            }
+
+            /* ─────────────────────────────────────────────────────
+             * STEP 4: Tahan selama EMERGENCY_HOLD_MS
+             * ──────────────────────────────────────────────────── */
+            TRACE_EMG("EMG_HOLDING");
+            vTaskDelay(pdMS_TO_TICKS(EMERGENCY_HOLD_MS));
+
+            /* ─────────────────────────────────────────────────────
+             * STEP 5: Restore Transitions & State (FR-07)
+             * ──────────────────────────────────────────────────── */
+            TRACE_EMG("EMG_RESTORE");
+
+            if (prevActiveLane == emergLane && prevPhase == LIGHT_GREEN) {
+                // Jika tidak ada pergantian jalur, kembalikan langsung ke normal
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.emergencyActive    = false;
+                    gTrafficState.activeLane         = savedState.activeLane;
+                    gTrafficState.lanePhase          = savedState.lanePhase;
+                    gTrafficState.greenRemaining_ms  = savedState.greenRemaining_ms;
+                    gTrafficState.greenDuration_ms   = savedState.greenDuration_ms;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor restoreLEDState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    restoreLEDState[i] = (i == (int)prevActiveLane) ? LIGHT_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(restoreLEDState);
+            } else {
+                // 1. Kuningkan jalur emergency yang tadinya hijau
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = emergLane;
+                    gTrafficState.lanePhase  = LIGHT_YELLOW;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor yellowState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    yellowState[i] = (i == (int)emergLane) ? LIGHT_YELLOW : LIGHT_RED;
+                }
+                setAllLEDs(yellowState);
+                vTaskDelay(pdMS_TO_TICKS(YELLOW_MS));
+
+                // 2. Set semua merah (All RED) untuk pengosongan simpang
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = emergLane;
+                    gTrafficState.lanePhase  = LIGHT_RED;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor allRedState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    allRedState[i] = LIGHT_RED;
+                }
+                setAllLEDs(allRedState);
+                vTaskDelay(pdMS_TO_TICKS(500)); // Buffer all-red selama 500ms
+
+                // 3. Kuningkan persiapan (YEL->G) jalur normal yang akan aktif
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.activeLane = prevActiveLane;
+                    gTrafficState.lanePhase  = LIGHT_YELLOW_TO_GREEN;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor prepState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    prepState[i] = (i == (int)prevActiveLane) ? LIGHT_YELLOW_TO_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(prepState);
+                vTaskDelay(pdMS_TO_TICKS(YELLOW_TO_GREEN_MS));
+
+                // 4. Kembalikan state ke normal dan aktifkan jalur hijau normal
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    gTrafficState.emergencyActive    = false;
+                    gTrafficState.activeLane         = savedState.activeLane;
+                    gTrafficState.lanePhase          = LIGHT_GREEN; // Mulai langsung di hijau
+                    gTrafficState.greenRemaining_ms  = savedState.greenRemaining_ms;
+                    gTrafficState.greenDuration_ms   = savedState.greenDuration_ms;
+                    xSemaphoreGive(stateMutex);
+                }
+                LightColor normalGreenState[LANE_COUNT];
+                for (int i = 0; i < LANE_COUNT; i++) {
+                    normalGreenState[i] = (i == (int)prevActiveLane) ? LIGHT_GREEN : LIGHT_RED;
+                }
+                setAllLEDs(normalGreenState);
+            }
+
+            /* ─────────────────────────────────────────────────────
+             * STEP 6: Update MonitoringData — clear flag emergency
+             * ──────────────────────────────────────────────────── */
+            if (xSemaphoreTake(monitorMutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+                gMonitoringData.emergencyActive = false;
+                xSemaphoreGive(monitorMutex);
+            }
 
             TRACE_EMG("EMG_DONE");
             Serial.printf("[EMG] Emergency on lane %d cleared. Restoring normal operation.\n", emergLane);

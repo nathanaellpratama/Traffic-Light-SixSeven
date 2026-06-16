@@ -162,14 +162,22 @@ void TaskTrafficLight(void *pvParameters) {
         if (emergencyActive) {
             /* ──────────────────────────────────────────────────
              * MODE DARURAT — LED sudah di-set oleh TaskEmergencyHandler.
-             * Task ini cukup mirror status ke MonitoringData.
-             * Jangan override LED! (Emergency Handler sudah set dengan benar)
+             * Task ini cukup mirror status ke MonitoringData secara dinamis.
+             * Jangan override LED!
              * ─────────────────────────────────────────────────*/
             TRACE_LIGHT("LIGHT_EMERGENCY_MODE");
 
+            Lane actLane = LANE_NORTH;
+            LightColor actPhase = LIGHT_RED;
+            if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(5)) == pdTRUE) {
+                actLane = gTrafficState.activeLane;
+                actPhase = gTrafficState.lanePhase;
+                xSemaphoreGive(stateMutex);
+            }
+
             LightColor emergColors[LANE_COUNT];
             for (int i = 0; i < LANE_COUNT; i++) {
-                emergColors[i] = (i == (int)emergencyLane) ? LIGHT_GREEN : LIGHT_RED;
+                emergColors[i] = (i == (int)actLane) ? actPhase : LIGHT_RED;
             }
             updateMonitorLightStatus(emergColors);
 
@@ -182,15 +190,21 @@ void TaskTrafficLight(void *pvParameters) {
              * MODE NORMAL — State Machine
              * ─────────────────────────────────────────────────*/
 
-            /* Jika baru pulih dari emergency, pastikan semua lampu kembali merah dulu,
-             * lalu mulai dari fase kuning persiapan (YEL->G) agar transisi kuning tetap terlihat */
+            /* Jika baru pulih dari emergency, sinkronkan internal state ke restore state
+             * yang telah diselesaikan oleh TaskEmergencyHandler */
             if (wasEmergency) {
-                setAllRed();
                 wasEmergency = false;
-                currentPhase = LIGHT_YELLOW_TO_GREEN;
+                if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                    currentLane = gTrafficState.activeLane;
+                    currentPhase = gTrafficState.lanePhase; // Langsung ke restored phase (GREEN)
+                    greenDuration_ms = gTrafficState.greenDuration_ms;
+                    xSemaphoreGive(stateMutex);
+                }
                 timeInPhase_ms = 0;
-                setLaneLED((int)currentLane, LIGHT_YELLOW_TO_GREEN);
-                Serial.printf("[LIGHT] %s: Emergency recovery → YEL->G (prep)\n", LANE_NAMES[(int)currentLane]);
+                setLaneLED((int)currentLane, currentPhase);
+                Serial.printf("[LIGHT] %s: Emergency recovery complete → %s (dur=%ums)\n",
+                              LANE_NAMES[(int)currentLane],
+                              currentPhase == LIGHT_GREEN ? "GREEN" : "OTHER", greenDuration_ms);
             }
 
             /* Ambil greenDuration terbaru dari Controller (timeout pendek) */
