@@ -182,4 +182,11 @@ extern portMUX_TYPE gEmergencyMux;
  */
 extern TaskHandle_t hTaskTrafficLight;
 
+/**
+ * @brief Flag untuk memicu dump trace MabuTrace dari TaskMonitoring.
+ *        Ditulis oleh TaskEmergencyHandler setelah selesai merestorasi normal,
+ *        dibaca dan di-clear oleh TaskMonitoring.
+ */
+extern volatile bool gTriggerTraceDump;
+
 #endif /* SYNC_OBJECTS_H */

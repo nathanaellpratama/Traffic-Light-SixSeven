@@ -127,28 +127,34 @@ void TaskMonitoring(void *pvParameters) {
     Serial.println("[MON] TaskMonitoring started (Core 0, P=2, T=500ms). Press 't' or 'T' to dump MabuTrace JSON.");
 
     for (;;) {
-        /* Cek input serial untuk trigger dump trace MabuTrace */
+        /* Cek input serial atau trigger flag global untuk dump trace MabuTrace */
 #if defined(MABUTRACE_ENABLED)
+        bool shouldDump = gTriggerTraceDump;
         if (Serial.available() > 0) {
             char c = Serial.read();
             if (c == 't' || c == 'T') {
-                while (Serial.available() > 0) { Serial.read(); } // Clear buffer
+                shouldDump = true;
+            }
+            while (Serial.available() > 0) { Serial.read(); } // Clear buffer
+        }
 
-                // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
-                if (hTaskTrafficLight != NULL) {
-                    vTaskSuspend(hTaskTrafficLight);
-                }
+        if (shouldDump) {
+            gTriggerTraceDump = false; // Reset flag
 
-                Serial.println(F("\n--- MABUTRACE JSON DUMP START ---"));
-                get_json_trace_chunked(NULL, [](void* ctx, const char* chunk, size_t size) {
-                    Serial.print(chunk);
-                });
-                Serial.println(F("\n--- MABUTRACE JSON DUMP END ---"));
+            // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
+            if (hTaskTrafficLight != NULL) {
+                vTaskSuspend(hTaskTrafficLight);
+            }
 
-                // Resume task normal traffic light setelah selesai dump
-                if (hTaskTrafficLight != NULL) {
-                    vTaskResume(hTaskTrafficLight);
-                }
+            Serial.println(F("\n--- MABUTRACE JSON DUMP START ---"));
+            get_json_trace_chunked(NULL, [](void* ctx, const char* chunk, size_t size) {
+                Serial.print(chunk);
+            });
+            Serial.println(F("\n--- MABUTRACE JSON DUMP END ---"));
+
+            // Resume task normal traffic light setelah selesai dump
+            if (hTaskTrafficLight != NULL) {
+                vTaskResume(hTaskTrafficLight);
             }
         }
 #endif

@@ -126,6 +126,7 @@ portMUX_TYPE      gEmergencyMux  = portMUX_INITIALIZER_UNLOCKED;
 
 /* Task handle untuk suspend/resume */
 TaskHandle_t      hTaskTrafficLight = NULL;
+volatile bool     gTriggerTraceDump = false;
 
 /* ── LCD instance (dipakai di task_monitoring.cpp) ── */
 LiquidCrystal_I2C lcd(LCD_I2C_ADDR, LCD_COLS, LCD_ROWS);

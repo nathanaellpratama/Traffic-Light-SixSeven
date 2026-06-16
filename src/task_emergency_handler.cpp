@@ -352,30 +352,9 @@ void TaskEmergencyHandler(void *pvParameters) {
             TRACE_EMG("EMG_DONE");
             Serial.printf("[EMG] Emergency on lane %d cleared. Restoring normal operation.\n", emergLane);
 
-            Serial.println(F("[DBG] Emergency task finished. Checking MabuTrace..."));
-#if defined(MABUTRACE_ENABLED)
-            Serial.println(F("[DBG] MABUTRACE_ENABLED is defined! Starting dump in 2 seconds..."));
-            // Tunggu 2 detik agar fase normal berjalan sedikit dan tercatat di buffer
-            vTaskDelay(pdMS_TO_TICKS(2000));
-
-            // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
-            if (hTaskTrafficLight != NULL) {
-                vTaskSuspend(hTaskTrafficLight);
-            }
-
-            Serial.println(F("\n--- AUTO MABUTRACE JSON DUMP START (Post-Emergency) ---"));
-            get_json_trace_chunked(NULL, [](void* ctx, const char* chunk, size_t size) {
-                Serial.print(chunk);
-            });
-            Serial.println(F("\n--- AUTO MABUTRACE JSON DUMP END ---"));
-
-            // Resume task normal traffic light setelah selesai dump
-            if (hTaskTrafficLight != NULL) {
-                vTaskResume(hTaskTrafficLight);
-            }
-#else
-            Serial.println(F("[DBG] MABUTRACE_ENABLED is NOT defined."));
-#endif
+            // Picu dump trace MabuTrace di TaskMonitoring (karena prioritas TaskEmergencyHandler tinggi
+            // dan stack size-nya terbatas, pemrosesan dump dialihkan ke monitoring task).
+            gTriggerTraceDump = true;
         }
 
         /* Kembali ke blocking wait untuk emergency berikutnya */
