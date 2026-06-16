@@ -181,6 +181,8 @@ extern portMUX_TYPE gEmergencyMux;
  *        mencegah race condition penulisan GPIO.
  */
 extern TaskHandle_t hTaskTrafficLight;
+extern TaskHandle_t hTaskTrafficController;
+extern TaskHandle_t hTaskEmergencyHandler;
 
 /**
  * @brief Flag untuk memicu dump trace MabuTrace dari TaskMonitoring.

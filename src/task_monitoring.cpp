@@ -140,10 +140,10 @@ void TaskMonitoring(void *pvParameters) {
 
         if (shouldDump) {
 
-            // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
-            if (hTaskTrafficLight != NULL) {
-                vTaskSuspend(hTaskTrafficLight);
-            }
+            // Suspend tasks agar log normal tidak bertabrakan dan merusak format JSON dump
+            if (hTaskTrafficLight != NULL) { vTaskSuspend(hTaskTrafficLight); }
+            if (hTaskTrafficController != NULL) { vTaskSuspend(hTaskTrafficController); }
+            if (hTaskEmergencyHandler != NULL) { vTaskSuspend(hTaskEmergencyHandler); }
 
             Serial.println(F("\n--- MABUTRACE JSON DUMP START ---"));
             get_json_trace_chunked(NULL, [](void* ctx, const char* chunk, size_t size) {
@@ -151,10 +151,10 @@ void TaskMonitoring(void *pvParameters) {
             });
             Serial.println(F("\n--- MABUTRACE JSON DUMP END ---"));
 
-            // Resume task normal traffic light setelah selesai dump
-            if (hTaskTrafficLight != NULL) {
-                vTaskResume(hTaskTrafficLight);
-            }
+            // Resume tasks kembali setelah dump selesai
+            if (hTaskEmergencyHandler != NULL) { vTaskResume(hTaskEmergencyHandler); }
+            if (hTaskTrafficController != NULL) { vTaskResume(hTaskTrafficController); }
+            if (hTaskTrafficLight != NULL) { vTaskResume(hTaskTrafficLight); }
         }
 #endif
 

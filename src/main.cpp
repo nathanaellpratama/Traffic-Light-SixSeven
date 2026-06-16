@@ -126,6 +126,8 @@ portMUX_TYPE      gEmergencyMux  = portMUX_INITIALIZER_UNLOCKED;
 
 /* Task handle untuk suspend/resume */
 TaskHandle_t      hTaskTrafficLight = NULL;
+TaskHandle_t      hTaskTrafficController = NULL;
+TaskHandle_t      hTaskEmergencyHandler = NULL;
 volatile bool     gTriggerTraceDump = false;
 
 /* ── LCD instance (dipakai di task_monitoring.cpp) ── */
@@ -276,7 +278,7 @@ void setup() {
         STACK_EMERGENCY,            /* Stack dalam WORD (1 word = 4 byte di ESP32) */
         NULL,                       /* Parameter */
         PRIORITY_EMERGENCY,         /* Prioritas = 5 */
-        NULL,                       /* Handle (tidak dipakai) */
+        &hTaskEmergencyHandler,     /* Handle */
         CORE_APP                    /* Core 1 */
     );
     configASSERT(ret == pdPASS);
@@ -288,7 +290,7 @@ void setup() {
         STACK_CONTROLLER,
         NULL,
         PRIORITY_CONTROLLER,        /* Prioritas = 4 */
-        NULL,
+        &hTaskTrafficController,    /* Handle */
         CORE_APP                    /* Core 1 */
     );
     configASSERT(ret == pdPASS);
