@@ -124,9 +124,35 @@ void TaskMonitoring(void *pvParameters) {
     const UBaseType_t warnThreshold  = stackSizeWords * STACK_WARNING_THRESHOLD_PCT / 100;
     uint32_t cycleCount  = 0;
 
-    Serial.println("[MON] TaskMonitoring started (Core 0, P=2, T=500ms).");
+    Serial.println("[MON] TaskMonitoring started (Core 0, P=2, T=500ms). Press 't' or 'T' to dump MabuTrace JSON.");
 
     for (;;) {
+        /* Cek input serial untuk trigger dump trace MabuTrace */
+#if defined(MABUTRACE_ENABLED)
+        if (Serial.available() > 0) {
+            char c = Serial.read();
+            if (c == 't' || c == 'T') {
+                while (Serial.available() > 0) { Serial.read(); } // Clear buffer
+
+                // Suspend task normal traffic light agar log tidak bertabrakan dengan JSON dump
+                if (hTaskTrafficLight != NULL) {
+                    vTaskSuspend(hTaskTrafficLight);
+                }
+
+                Serial.println(F("\n--- MABUTRACE JSON DUMP START ---"));
+                get_json_trace_chunked(NULL, [](void* ctx, const char* chunk, size_t size) {
+                    Serial.print(chunk);
+                });
+                Serial.println(F("\n--- MABUTRACE JSON DUMP END ---"));
+
+                // Resume task normal traffic light setelah selesai dump
+                if (hTaskTrafficLight != NULL) {
+                    vTaskResume(hTaskTrafficLight);
+                }
+            }
+        }
+#endif
+
         {
 #if defined(MABUTRACE_ENABLED)
             TRACE_SCOPE("TaskMonitoring");

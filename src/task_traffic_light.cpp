@@ -76,11 +76,15 @@ static const char* LANE_NAMES[LANE_COUNT] = { "NORTH", "EAST", "SOUTH", "WEST" }
  * @param color    Warna yang diinginkan
  */
 static void setLaneLED(int laneIdx, LightColor color) {
-    if (gTrafficState.emergencyActive) {
-        return;
-    }
+    /* Guard: jangan sentuh LED jika emergency aktif.
+     * Re-check sebelum SETIAP digitalWrite untuk mencegah
+     * race condition saat TaskEmergencyHandler preempt task ini
+     * di tengah-tengah fungsi ini (TOCTOU prevention). */
+    if (gTrafficState.emergencyActive) return;
     digitalWrite(PIN_LED_R[laneIdx], (color == LIGHT_RED)    ? HIGH : LOW);
+    if (gTrafficState.emergencyActive) return;
     digitalWrite(PIN_LED_Y[laneIdx], (color == LIGHT_YELLOW || color == LIGHT_YELLOW_TO_GREEN) ? HIGH : LOW);
+    if (gTrafficState.emergencyActive) return;
     digitalWrite(PIN_LED_G[laneIdx], (color == LIGHT_GREEN)  ? HIGH : LOW);
 }
 
@@ -151,16 +155,11 @@ void TaskTrafficLight(void *pvParameters) {
             TRACE_LIGHT("LIGHT_START");
 
         /* ─────────────────────────────────────────────────────
-         * CEK EMERGENCY — baca dari TrafficState (timeout singkat)
+         * CEK EMERGENCY — Baca langsung secara atomic (volatile)
+         * untuk mencegah delay/stale state saat mutex sibuk.
          * ──────────────────────────────────────────────────── */
-        static bool emergencyActive = false;
-        static Lane emergencyLane   = LANE_NORTH;
-
-        if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-            emergencyActive = gTrafficState.emergencyActive;
-            emergencyLane   = gTrafficState.emergencyLane;
-            xSemaphoreGive(stateMutex);
-        }
+        bool emergencyActive = gTrafficState.emergencyActive;
+        Lane emergencyLane   = gTrafficState.emergencyLane;
 
         if (emergencyActive) {
             /* ──────────────────────────────────────────────────

@@ -171,4 +171,15 @@ extern volatile Lane gEmergencyLane;
  */
 extern portMUX_TYPE gEmergencyMux;
 
+/* ─────────────────────────────────────────────────────────────
+ * 6. TASK HANDLES (untuk vTaskSuspend/vTaskResume)
+ * ──────────────────────────────────────────────────────────── */
+
+/**
+ * @brief Handle TaskTrafficLight — digunakan oleh TaskEmergencyHandler
+ *        untuk men-suspend task ini selama transisi LED emergency,
+ *        mencegah race condition penulisan GPIO.
+ */
+extern TaskHandle_t hTaskTrafficLight;
+
 #endif /* SYNC_OBJECTS_H */
