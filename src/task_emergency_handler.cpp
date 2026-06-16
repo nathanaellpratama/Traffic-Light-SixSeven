@@ -152,10 +152,15 @@ void TaskEmergencyHandler(void *pvParameters) {
             LightColor prevPhase = savedState.lanePhase;
 
             /* ─────────────────────────────────────────────────────
-             * STEP 2: Transisi Emergency Mulai (Start Transitions)
+             * STEP 2: Transisi Emergency — seperti lalu lintas nyata
+             *
+             * Durasi kuning dipercepat (500ms) agar cepat tapi
+             * tetap terlihat transisinya, seperti saat ambulance lewat.
              * ──────────────────────────────────────────────────── */
+            const uint32_t EMG_YELLOW_MS = 500; // Kuning cepat saat emergency
+
             if (prevActiveLane == emergLane && prevPhase == LIGHT_GREEN) {
-                // Jika jalur darurat sudah aktif dan sudah hijau, tidak perlu transisi.
+                /* Jalur darurat sudah hijau — tidak perlu transisi apapun */
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     gTrafficState.activeLane = emergLane;
                     gTrafficState.lanePhase  = LIGHT_GREEN;
@@ -166,9 +171,34 @@ void TaskEmergencyHandler(void *pvParameters) {
                     emergLEDState[i] = (i == (int)emergLane) ? LIGHT_GREEN : LIGHT_RED;
                 }
                 setAllLEDs(emergLEDState);
+
             } else {
-                // Langsung set semua merah kecuali jalur emergency yang bersiap kuning
-                // (Jalur aktif sebelumnya langsung mati/merah demi prioritas darurat)
+                /* ── Transisi 1: Jalur aktif HIJAU → KUNING → MERAH ── */
+                if (prevPhase == LIGHT_GREEN || prevPhase == LIGHT_YELLOW_TO_GREEN) {
+                    if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
+                        gTrafficState.activeLane = prevActiveLane;
+                        gTrafficState.lanePhase  = LIGHT_YELLOW;
+                        xSemaphoreGive(stateMutex);
+                    }
+                    LightColor yellowState[LANE_COUNT];
+                    for (int i = 0; i < LANE_COUNT; i++) {
+                        yellowState[i] = (i == (int)prevActiveLane) ? LIGHT_YELLOW : LIGHT_RED;
+                    }
+                    setAllLEDs(yellowState);
+                    vTaskDelay(pdMS_TO_TICKS(EMG_YELLOW_MS));
+                }
+
+                // Semua merah sebentar (pengosongan simpang)
+                {
+                    LightColor allRedState[LANE_COUNT];
+                    for (int i = 0; i < LANE_COUNT; i++) {
+                        allRedState[i] = LIGHT_RED;
+                    }
+                    setAllLEDs(allRedState);
+                    vTaskDelay(pdMS_TO_TICKS(200));
+                }
+
+                /* ── Transisi 2: Jalur emergency MERAH → KUNING → HIJAU ── */
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
                     gTrafficState.activeLane = emergLane;
                     gTrafficState.lanePhase  = LIGHT_YELLOW_TO_GREEN;
@@ -179,7 +209,7 @@ void TaskEmergencyHandler(void *pvParameters) {
                     prepState[i] = (i == (int)emergLane) ? LIGHT_YELLOW_TO_GREEN : LIGHT_RED;
                 }
                 setAllLEDs(prepState);
-                vTaskDelay(pdMS_TO_TICKS(YELLOW_TO_GREEN_MS));
+                vTaskDelay(pdMS_TO_TICKS(EMG_YELLOW_MS));
 
                 // Hijaukan jalur emergency
                 if (xSemaphoreTake(stateMutex, pdMS_TO_TICKS(50)) == pdTRUE) {
