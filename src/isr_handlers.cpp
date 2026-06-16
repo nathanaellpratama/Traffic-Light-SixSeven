@@ -138,21 +138,29 @@ IMPLEMENT_EMERGENCY_ISR(isrEmergency_W, LANE_WEST)
  * TaskEmergencyHandler, meminimalkan inter-core signaling overhead.
  * ──────────────────────────────────────────────────────────── */
 void attachInterrupts(void) {
-    /* ── ISR Kendaraan Normal — mode FALLING, internal pull-up ── */
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_N), isrVehicle_N, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_S), isrVehicle_S, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_E), isrVehicle_E, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_W), isrVehicle_W, FALLING);
-
-    /* ── ISR Kendaraan Darurat — mode FALLING, eksternal pull-up 10kΩ ── */
-    /* GPIO 34-39 input-only, tidak ada internal pull-up; pull-up di diagram */
-#if defined(ENABLE_EMERGENCY_BUTTONS) && (ENABLE_EMERGENCY_BUTTONS == 1)
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_N), isrEmergency_N, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_S), isrEmergency_S, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_E), isrEmergency_E, FALLING);
-    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_W), isrEmergency_W, FALLING);
-    Serial.println("[ISR] 8 interrupt handlers attached (4 vehicle, 4 emergency, FALLING edge).");
+    /* Tentukan trigger edge berdasarkan BUTTON_ACTIVE_LOW */
+#if BUTTON_ACTIVE_LOW
+    const int triggerEdge = FALLING;
 #else
-    Serial.println("[ISR] 4 interrupt handlers attached (4 vehicle, emergency disabled, FALLING edge).");
+    const int triggerEdge = RISING;
+#endif
+
+    /* ── ISR Kendaraan Normal ── */
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_N), isrVehicle_N, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_S), isrVehicle_S, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_E), isrVehicle_E, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_W), isrVehicle_W, triggerEdge);
+
+    /* ── ISR Kendaraan Darurat ── */
+#if defined(ENABLE_EMERGENCY_BUTTONS) && (ENABLE_EMERGENCY_BUTTONS == 1)
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_N), isrEmergency_N, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_S), isrEmergency_S, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_E), isrEmergency_E, triggerEdge);
+    attachInterrupt(digitalPinToInterrupt(PIN_BTN_EMG_W), isrEmergency_W, triggerEdge);
+    Serial.printf("[ISR] 8 interrupt handlers attached (4 vehicle, 4 emergency, %s edge).\n",
+                  BUTTON_ACTIVE_LOW ? "FALLING" : "RISING");
+#else
+    Serial.printf("[ISR] 4 interrupt handlers attached (4 vehicle, emergency disabled, %s edge).\n",
+                  BUTTON_ACTIVE_LOW ? "FALLING" : "RISING");
 #endif
 }

@@ -148,13 +148,20 @@ void initGPIO(void) {
     pinMode(PIN_LED_W_YEL, OUTPUT); digitalWrite(PIN_LED_W_YEL, LOW);
     pinMode(PIN_LED_W_GRN, OUTPUT); digitalWrite(PIN_LED_W_GRN, LOW);
 
-    /* ── Tombol Normal: INPUT_PULLUP (FALLING edge → LOW saat ditekan) ── */
+    /* ── Tombol Normal: INPUT_PULLUP (active-low) atau INPUT_PULLDOWN (active-high) ── */
+#if BUTTON_ACTIVE_LOW
     pinMode(PIN_BTN_N, INPUT_PULLUP);
     pinMode(PIN_BTN_S, INPUT_PULLUP);
     pinMode(PIN_BTN_E, INPUT_PULLUP);
     pinMode(PIN_BTN_W, INPUT_PULLUP);
+#else
+    pinMode(PIN_BTN_N, INPUT_PULLDOWN);
+    pinMode(PIN_BTN_S, INPUT_PULLDOWN);
+    pinMode(PIN_BTN_E, INPUT_PULLDOWN);
+    pinMode(PIN_BTN_W, INPUT_PULLDOWN);
+#endif
 
-    /* ── Tombol Emergency: INPUT (pull-up eksternal 220Ω ke 3.3V) ── */
+    /* ── Tombol Emergency: INPUT (resistor eksternal wajib) ── */
     pinMode(PIN_BTN_EMG_N, INPUT);
     pinMode(PIN_BTN_EMG_S, INPUT);
     pinMode(PIN_BTN_EMG_E, INPUT);

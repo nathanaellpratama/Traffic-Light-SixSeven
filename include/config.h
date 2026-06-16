@@ -185,6 +185,10 @@
 /* ── KONTROL FITUR TOMBOL EMERGENCY ──────────────────────── */
 #define ENABLE_EMERGENCY_BUTTONS 1 ///< Set ke 1 untuk mengaktifkan tombol emergency (GPIO 34/35/36/39)
 
+/* ── KONTROL AKTIF TOMBOL (ACTIVE-LOW / ACTIVE-HIGH) ──────── */
+#define BUTTON_ACTIVE_LOW 1 ///< Set ke 1 jika tombol terhubung ke GND saat ditekan (active-low, default)
+                            ///< Set ke 0 jika tombol terhubung ke 3.3V saat ditekan (active-high)
+
 /* ─────────────────────────────────────────────────────────────
  * 8. ENUMERASI
  * ──────────────────────────────────────────────────────────── */
